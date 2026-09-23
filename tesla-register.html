@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Tesla Partner Registration (runs locally in your browser)</title>
+<style>body{font-family:system-ui,sans-serif;max-width:720px;margin:2em auto;padding:0 1em}label{display:block;margin:.6em 0}input{width:100%;box-sizing:border-box}pre{background:#f4f4f4;padding:1em;white-space:pre-wrap}</style>
+</head>
+<body>
+<h1>Tesla partner registration</h1>
+<p>This page runs entirely in your browser. It requests a partner token with the
+app credentials, then registers the domain with Tesla. Tokens are never displayed
+and the credential fields are cleared when the flow finishes.</p>
+<label>Client ID <input id="cid" autocomplete="off" spellcheck="false"></label>
+<label>Client secret <input id="csec" type="password" autocomplete="off"></label>
+<label>Domain to register <input id="dom" value="vasilis.github.io" autocomplete="off" spellcheck="false"></label>
+<button id="go">Get partner token and register</button>
+<pre id="out">Waiting.</pre>
+<script>
+const outEl = document.getElementById('out');
+const out = (t) => { outEl.textContent += t + "\n"; };
+document.getElementById('go').onclick = async () => {
+  const cid = document.getElementById('cid').value.trim();
+  const csec = document.getElementById('csec').value.trim();
+  const dom = document.getElementById('dom').value.trim();
+  outEl.textContent = "";
+  try {
+    out("Step 1: requesting partner token...");
+    const form = new URLSearchParams({
+      grant_type: "client_credentials",
+      client_id: cid,
+      client_secret: csec,
+      scope: "openid offline_access energy_device_data",
+      audience: "https://fleet-api.prd.vn.cloud.tesla.com"
+    });
+    const t0 = performance.now();
+    const tr = await fetch("https://fleet-auth.prd.vn.cloud.tesla.com/oauth2/v3/token", {
+      method: "POST",
+      headers: {"Content-Type": "application/x-www-form-urlencoded"},
+      body: form
+    });
+    const tms = Math.round(performance.now() - t0);
+    const ttext = await tr.text();
+    out("Token endpoint: HTTP " + tr.status + " (" + tms + " ms)");
+    let tj = {};
+    try { tj = JSON.parse(ttext); } catch (e) { /* non-JSON */ }
+    if (!tr.ok || !tj.access_token) {
+      out("Token FAILED. Server said: " + ttext.slice(0, 300));
+      return;
+    }
+    out("Token OK (value not displayed).");
+    out("Step 2: registering domain " + dom + " ...");
+    const r0 = performance.now();
+    const rr = await fetch("https://fleet-api.prd.na.vn.cloud.tesla.com/api/1/partner_accounts", {
+      method: "POST",
+      headers: {"Content-Type": "application/json", "Authorization": "Bearer " + tj.access_token},
+      body: JSON.stringify({domain: dom})
+    });
+    const rms = Math.round(performance.now() - r0);
+    const rtext = await rr.text();
+    out("Registration: HTTP " + rr.status + " (" + rms + " ms)");
+    out("Response: " + rtext.slice(0, 500));
+  } catch (e) {
+    out("FETCH ERROR (likely CORS or network block): " + (e && e.message ? e.message : String(e)));
+  } finally {
+    document.getElementById('cid').value = "";
+    document.getElementById('csec').value = "";
+    out("Credential fields cleared.");
+  }
+};
+</script>
+</body>
+</html>
