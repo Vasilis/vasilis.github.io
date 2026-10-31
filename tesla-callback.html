@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>Tesla sign-in done</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:640px;margin:2em auto;padding:0 16px;line-height:1.5}
+textarea{width:100%;box-sizing:border-box;font:13px ui-monospace,monospace;padding:.6em}
+button{font-size:16px;padding:.5em 1em;margin-top:.6em}
+.err{color:#b00020}
+</style>
+</head>
+<body>
+<h1>Tesla sign-in</h1>
+<p id="msg">Reading the sign-in result…</p>
+<textarea id="code" rows="4" readonly hidden></textarea>
+<button id="copy" hidden>Copy</button>
+<p><small>This page only displays the one-time code Tesla put in its address. It sends nothing anywhere and stores nothing. The code is useless without the app's secret, which only the home bridge holds, and it expires within minutes.</small></p>
+<script>
+const q = new URLSearchParams(location.search);
+const msg = document.getElementById('msg'), box = document.getElementById('code'), btn = document.getElementById('copy');
+if (q.get('code')) {
+  box.value = q.get('code');
+  box.hidden = btn.hidden = false;
+  msg.textContent = 'Done. Leave this tab open; Claude picks the code up from here (or copy it into the LakHome thread).';
+  btn.onclick = async () => { try { await navigator.clipboard.writeText(box.value); btn.textContent = 'Copied'; } catch (e) { box.select(); } };
+} else {
+  msg.className = 'err';
+  msg.textContent = 'No code arrived' + (q.get('error') ? ': ' + q.get('error') + (q.get('error_description') ? ' (' + q.get('error_description') + ')' : '') : '.') + ' Try signing in again.';
+}
+</script>
+</body>
+</html>
