@@ -34,6 +34,9 @@ const REDIRECT = 'https://vasilis.github.io/tesla-callback.html';
 const q = new URLSearchParams(location.search);
 const code = q.get('code');
 const $ = id => document.getElementById(id);
+const AUTHORIZE = 'https://auth.tesla.com/oauth2/v3/authorize?' + new URLSearchParams({response_type: 'code', client_id: CLIENT_ID,
+  redirect_uri: REDIRECT, scope: 'openid offline_access vehicle_device_data', state: 'lakhome-cars', locale: 'en-US'});
+const again = () => { const a = document.createElement('a'); a.href = AUTHORIZE; a.textContent = 'Sign in to Tesla'; a.style.cssText = 'display:inline-block;margin-top:.8em;font-size:18px'; $('msg').after(a); };
 const say = (t, cls) => { $('msg').textContent = t; $('msg').className = cls || ''; };
 if (code) {
   say('Tesla accepted the sign-in. Paste the app\'s client secret (from your password manager) and press Finish.');
@@ -50,8 +53,8 @@ if (code) {
       });
       const j = await r.json().catch(() => ({}));
       if (!r.ok || !j.refresh_token) {
-        say('Tesla refused: ' + (j.error_description || j.error || ('HTTP ' + r.status)) + '. If the code expired, sign in again.', 'err');
-        $('go').disabled = false;
+        say('Tesla refused: ' + (j.error_description || j.error || ('HTTP ' + r.status)) + '. The sign-in code has probably expired; sign in again, then paste the secret right away.', 'err');
+        $('form').hidden = true; again();
         return;
       }
       $('refresh').value = j.refresh_token;
@@ -66,8 +69,12 @@ if (code) {
     }
   };
   $('copy').onclick = async () => { try { await navigator.clipboard.writeText($('refresh').value); $('copy').textContent = 'Copied'; } catch (e) { $('refresh').select(); } };
+} else if (q.get('error')) {
+  say('Tesla said: ' + q.get('error') + (q.get('error_description') ? ' (' + q.get('error_description') + ')' : '') + '. Try again.', 'err');
+  again();
 } else {
-  say('No code arrived' + (q.get('error') ? ': ' + q.get('error') + (q.get('error_description') ? ' (' + q.get('error_description') + ')' : '') : '.') + ' Try signing in again.', 'err');
+  say('Connect the cars to the home bridge (read-only: charge state and battery, no location, no commands).');
+  again();
 }
 </script>
 </body>
