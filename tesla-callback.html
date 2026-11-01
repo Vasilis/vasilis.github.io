@@ -4,31 +4,70 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="referrer" content="no-referrer">
-<title>Tesla sign-in done</title>
+<title>Tesla sign-in</title>
 <style>
 body{font-family:system-ui,sans-serif;max-width:640px;margin:2em auto;padding:0 16px;line-height:1.5}
-textarea{width:100%;box-sizing:border-box;font:13px ui-monospace,monospace;padding:.6em}
-button{font-size:16px;padding:.5em 1em;margin-top:.6em}
-.err{color:#b00020}
+label{display:block;margin:.8em 0 .3em;font-weight:600}
+input,textarea{width:100%;box-sizing:border-box;font:14px ui-monospace,monospace;padding:.6em}
+button{font-size:16px;padding:.5em 1em;margin-top:.8em}
+.err{color:#b00020}.ok{color:#0a7d32}
 </style>
 </head>
 <body>
 <h1>Tesla sign-in</h1>
 <p id="msg">Reading the sign-in result…</p>
-<textarea id="code" rows="4" readonly hidden></textarea>
-<button id="copy" hidden>Copy</button>
-<p><small>This page only displays the one-time code Tesla put in its address. It sends nothing anywhere and stores nothing. The code is useless without the app's secret, which only the home bridge holds, and it expires within minutes.</small></p>
+<form id="form" hidden autocomplete="on">
+  <input type="hidden" name="username" autocomplete="username" value="a691c819-d325-43ba-aa07-8fed18bdd1d3">
+  <label for="secret">Client secret of the "Home Energy Reader" Tesla app</label>
+  <input id="secret" type="password" autocomplete="current-password" spellcheck="false" required>
+  <button id="go" type="submit">Finish</button>
+</form>
+<div id="done" hidden>
+  <label for="refresh">Refresh token for the home bridge</label>
+  <textarea id="refresh" rows="4" readonly></textarea>
+  <button id="copy" type="button">Copy</button>
+</div>
+<p><small>Everything happens in this browser. The code from Tesla and your client secret go only to Tesla's own token service; nothing is stored. The bridge uses the refresh token once and Tesla then replaces it, so this copy stops working within a day.</small></p>
 <script>
+const CLIENT_ID = 'a691c819-d325-43ba-aa07-8fed18bdd1d3';
+const REDIRECT = 'https://vasilis.github.io/tesla-callback.html';
 const q = new URLSearchParams(location.search);
-const msg = document.getElementById('msg'), box = document.getElementById('code'), btn = document.getElementById('copy');
-if (q.get('code')) {
-  box.value = q.get('code');
-  box.hidden = btn.hidden = false;
-  msg.textContent = 'Done. Leave this tab open; Claude picks the code up from here (or copy it into the LakHome thread).';
-  btn.onclick = async () => { try { await navigator.clipboard.writeText(box.value); btn.textContent = 'Copied'; } catch (e) { box.select(); } };
+const code = q.get('code');
+const $ = id => document.getElementById(id);
+const say = (t, cls) => { $('msg').textContent = t; $('msg').className = cls || ''; };
+if (code) {
+  say('Tesla accepted the sign-in. Paste the app\'s client secret (from your password manager) and press Finish.');
+  $('form').hidden = false;
+  $('form').onsubmit = async ev => {
+    ev.preventDefault();
+    $('go').disabled = true;
+    say('Asking Tesla for the token…');
+    try {
+      const r = await fetch('https://fleet-auth.prd.vn.cloud.tesla.com/oauth2/v3/token', {
+        method: 'POST', headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+        body: new URLSearchParams({grant_type: 'authorization_code', client_id: CLIENT_ID, client_secret: $('secret').value.trim(),
+          code, audience: 'https://fleet-api.prd.na.vn.cloud.tesla.com', redirect_uri: REDIRECT})
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j.refresh_token) {
+        say('Tesla refused: ' + (j.error_description || j.error || ('HTTP ' + r.status)) + '. If the code expired, sign in again.', 'err');
+        $('go').disabled = false;
+        return;
+      }
+      $('refresh').value = j.refresh_token;
+      $('form').hidden = true; $('done').hidden = false;
+      history.replaceState(null, '', REDIRECT);
+      say('Done. Leave this tab open; Claude picks the token up from here.', 'ok');
+    } catch (e) {
+      say('Could not reach Tesla: ' + e.message, 'err');
+      $('go').disabled = false;
+    } finally {
+      $('secret').value = '';
+    }
+  };
+  $('copy').onclick = async () => { try { await navigator.clipboard.writeText($('refresh').value); $('copy').textContent = 'Copied'; } catch (e) { $('refresh').select(); } };
 } else {
-  msg.className = 'err';
-  msg.textContent = 'No code arrived' + (q.get('error') ? ': ' + q.get('error') + (q.get('error_description') ? ' (' + q.get('error_description') + ')' : '') : '.') + ' Try signing in again.';
+  say('No code arrived' + (q.get('error') ? ': ' + q.get('error') + (q.get('error_description') ? ' (' + q.get('error_description') + ')' : '') : '.') + ' Try signing in again.', 'err');
 }
 </script>
 </body>
